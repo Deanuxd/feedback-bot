@@ -1,0 +1,10 @@
+[2025-10-13 11:48:58 EDT] jayc34: Ive suggested this a few times, but I think walljumping would be really really cool for dodging and clearing gaps For example: You need to cross a gap that's just too large, so you jump into a wall and walljump instantly for that small bit of extra distance
+[2025-10-13 12:13:46 EDT] [Mod] yoguletu (reply to jayc34 (2025-10-13 15:48:58)): Monke and... other character has that mechanic
+[2025-10-13 12:15:09 EDT] yuzu2: Tier 3 boss makes lifesteal pretty useless, so despite it beaing a cliche i think spawning enemies would be good
+[2025-10-13 12:28:13 EDT] darkf4c: Crouching/Sliding: Make jumping exit crouch toggle. When you slide and jump, it immediately goes back into crouching shortly after the jump, making slide jumps with the toggle setting awkward. Your momentum gets abruptly interrupted midair unless you manually uncrouch
+
+With how it is currently, chaining slide jumps effectively would be crouch > jump > crouch > crouch > jump
+[2025-10-13 12:37:00 EDT] gravym8: Enemy Speed Scaling: The enemies speed scaling during the final swarm is very choppy. I propose that a smoothing effect that scales exponentially with the longer you have been alive. (Something like EnemySpeed x (SecondsAlive / 5) with the divider slowly decreasing for an exponential increase rate)
+[2025-10-13 12:42:51 EDT] tokaru_tan: We need an indicator for when an enemy has enough poison stacks to die. it primarily applies to amog, but in general it's hard to know when you can move onto other enemies, bosses excluded of course. Obviously you can't give every enemy a health bar, but I think if they get tinted purple when they have enough poison stacked up to kill them, that would be great visual feedback for a situation where you currently have to just guess
+[2025-10-13 12:43:05 EDT] [Mod] yoguletu (reply to tokaru_tan (2025-10-13 16:42:51)): Great idea!
+[2025-10-16 14:39:15 EDT] vaern: Knockback would definitely be better if ghosts didn't become basically immune to it a minute into the final swarm. There needs to be a mechanic where enemies take damage from being slammed into walls by knockback, or at least let them take fall damage
