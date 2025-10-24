@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from discord import Member
-from utils.db import db, Thread as DBThread
+from config.database import db
 
 @dataclass
 class ThreadInfo:

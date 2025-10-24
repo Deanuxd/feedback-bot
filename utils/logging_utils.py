@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from typing import Optional
-from utils.db import db
+from config.database import db
 
 try:
     # Python 3.9+

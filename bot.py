@@ -1,11 +1,13 @@
 import os
 from dotenv import load_dotenv
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from openai import OpenAI
+from datetime import datetime
 
 from utils.logging_utils import log_message
-from utils.db import db
+from utils.cleanup import MessageCleanup
+from config.database import db
 from permissions import is_privileged, DEV_ROLES, MOD_ROLES
 
 # Load environment variables from .env file
@@ -17,44 +19,6 @@ OPEN_API_KEY = os.getenv("OPENAI_KEY")
 
 TARGET_THREAD_ID = 1425907680479940688
 
-BACKGROUND_PROMPT = """
-You are an assistant that summarizes and analyzes user feedback from a Discord thread.
-The messages are written by users/mods discussing features, issues, and ideas.
-- Write concise, neutral summaries unless asked otherwise.
-- Focus on grouping similar feedback together.
-- Ignore jokes or unrelated chatter unless directly relevant.
-- Maintain a professional tone suitable for a product team review.
-- Take into account any replies to a message that contain important information regarding the original message, especially from Mods.
-- Pay special attention to feedback from users with [Mod] or [Dev] roles, as they often provide important context or confirmations.
-
-The following is the instruction given to users of the thread:
-Thanks for taking the time to give feedback! Please provide specific details about what do want/need and context, especially regarding the UI, difficulty, gameplay, and quality of life improvements.
-
-Yes:
-
-UI: Make the UI scalable with a config in the configuration menu.
-Difficulty: The enemies in the second level shouldn't be strong by default, maybe some scaling the first minute.
-Gameplay: The cooldown for the "Katana" skill feels too long, disrupting the combat flow.
-Quality of Life: Add a counter in the pause menu for in-game achievements.
-
-No:
-
-UI: The UI is bad.
-Difficulty: The game is too hard.
-Gameplay: Enemies are hitting are too fast.
-Quality of Life: The game needs better quality of life.
-
-
-NOTES
-The following items are a Work in Progress and more info will be given about them in the future:
-
-Translations
-Multiplayer
-Mod support
-More maps
-More characters and items
-"""
-
 def get_user_role(member: discord.Member) -> str:
     """Determine the highest priority role for a user."""
     if any(role.name in DEV_ROLES for role in member.roles):
@@ -63,13 +27,38 @@ def get_user_role(member: discord.Member) -> str:
         return "Mod"
     return None
 
+class FeedbackBot(commands.Bot):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.cleanup_manager = MessageCleanup()
+    
+    async def setup_hook(self):
+        """Called when the bot is done preparing data"""
+        print("Loading extensions...")
+        await self.load_extension("commands.thread_commands")
+        print("Extensions loaded!")
+        # Start the cleanup task after bot is ready
+        self.message_cleanup_task.start()
+    
+    @tasks.loop(hours=24)
+    async def message_cleanup_task(self):
+        """Run daily cleanup of old messages"""
+        from datetime import timezone
+        print(f"Running scheduled message cleanup at {datetime.now(timezone.utc)}")
+        await self.cleanup_manager.cleanup_old_messages()
+    
+    @message_cleanup_task.before_loop
+    async def before_cleanup(self):
+        """Wait until the bot is ready before starting the task"""
+        await self.wait_until_ready()
+
 # --- BOT SETUP ---
 intents = discord.Intents.default()
 intents.message_content = True  # required to read messages
 intents.guilds = True
 
 # Remove default help command
-bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
+bot = FeedbackBot(command_prefix="!", intents=intents, help_command=None)
 client = OpenAI(api_key=OPEN_API_KEY)
 
 # --- EVENTS ---
@@ -77,9 +66,7 @@ client = OpenAI(api_key=OPEN_API_KEY)
 async def on_ready():
     """Called when the bot is ready."""
     print(f"Logged in as {bot.user.name}")
-    print("Loading extensions...")
-    await bot.load_extension("commands.thread_commands")
-    print("Extensions loaded!")
+    print("Bot is ready!")
 
 @bot.event
 async def on_message(message):

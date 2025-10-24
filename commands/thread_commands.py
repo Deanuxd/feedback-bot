@@ -3,58 +3,41 @@ from discord.ext import commands
 from permissions import can_manage_threads, is_privileged
 from utils.thread_store import save_thread, get_thread_by_name
 from utils.logging_utils import log_message
-from utils.db import db, Session, Thread, Message
 from utils.migrate import migrate_log_to_db
+from utils.time_utils import parse_timeframe, format_timeframe
 from sqlalchemy.exc import SQLAlchemyError
-from openai import OpenAI
+from config.prompts import DEFAULT_PROMPT
+from config.database import db, Thread, Message
+from services.summarizer import SummarizerService
 import os
 
-# Initialize OpenAI client
-client = OpenAI(api_key=os.getenv("OPENAI_KEY"))
+# Initialize summarizer service
+summarizer = SummarizerService()
 
-BACKGROUND_PROMPT = """
-You are an assistant that summarizes and analyzes user feedback from a Discord thread.
-The messages are written by users/mods discussing features, issues, and ideas.
-- Write concise, neutral summaries unless asked otherwise.
-- Focus on grouping similar feedback together.
-- Ignore jokes or unrelated chatter unless directly relevant.
-- Maintain a professional tone suitable for a product team review.
-- Take into account any replies to a message that contain important information regarding the original message, especially from Mods.
-- Pay special attention to feedback from users with [Mod] or [Dev] roles, as they often provide important context or confirmations.
-"""
-
-async def summarize_thread(thread_info):
-    """Generate a summary for the specified thread using OpenAI."""
+async def summarize_thread(thread_info, timeframe=None):
+    """Generate a summary for the specified thread using configured AI provider."""
     try:
-        # Get all messages for the thread
-        with Session() as session:
-            messages = session.query(Message).filter(
-                Message.thread_id == thread_info.thread_id
-            ).order_by(Message.created_at.asc()).all()
+        # Parse timeframe and get date range
+        start_date, end_date = parse_timeframe(timeframe)
+        
+        # Get messages for the thread within the timeframe
+        messages = db.get_messages(
+            thread_info.thread_id,
+            start_date=start_date,
+            end_date=end_date
+        )
 
-            if not messages:
-                return "No messages found in this thread."
+        if not messages:
+            return f"No messages found in this thread for {format_timeframe(start_date, end_date)}."
 
-            # Format messages for the AI
-            formatted_messages = []
-            for msg in messages:
-                role_prefix = f"[{msg.role}] " if msg.role else ""
-                formatted_messages.append(f"{role_prefix}{msg.author}: {msg.content}")
+        # Format messages for the AI
+        formatted_messages = []
+        for msg in messages:
+            role_prefix = f"[{msg.role}] " if msg.role else ""
+            formatted_messages.append(f"{role_prefix}{msg.author}: {msg.content}")
 
-            message_text = "\n".join(formatted_messages)
-
-            # Generate summary using OpenAI
-            response = client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": BACKGROUND_PROMPT},
-                    {"role": "user", "content": f"Summarize the following feedback thread:\n\n{message_text}"}
-                ],
-                max_tokens=1000,
-                temperature=0.7
-            )
-
-            return response.choices[0].message.content.strip()
+        # Generate summary using configured AI provider
+        return await summarizer.generate_summary(formatted_messages, DEFAULT_PROMPT)
 
     except Exception as e:
         print(f"Error generating summary: {e}")
@@ -65,35 +48,33 @@ async def import_thread_history(thread: discord.Thread, progress_message = None)
     messages_imported = 0
     
     try:
-        with Session() as session:
-            async for msg in thread.history(limit=None, oldest_first=True):
-                if not msg.author.bot and msg.content.strip():
-                    reply_to = None
-                    if msg.reference and msg.reference.resolved:
-                        reply_to = f"{msg.reference.resolved.author} ({msg.reference.resolved.created_at.strftime('%Y-%m-%d %H:%M:%S')})"
-                    elif msg.reference:
-                        try:
-                            ref = await msg.channel.fetch_message(msg.reference.message_id)
-                            reply_to = f"{ref.author} ({ref.created_at.strftime('%Y-%m-%d %H:%M:%S')})"
-                        except Exception:
-                            pass
+        async for msg in thread.history(limit=None, oldest_first=True):
+            if not msg.author.bot and msg.content.strip():
+                reply_to = None
+                if msg.reference and msg.reference.resolved:
+                    reply_to = f"{msg.reference.resolved.author} ({msg.reference.resolved.created_at.strftime('%Y-%m-%d %H:%M:%S')})"
+                elif msg.reference:
+                    try:
+                        ref = await msg.channel.fetch_message(msg.reference.message_id)
+                        reply_to = f"{ref.author} ({ref.created_at.strftime('%Y-%m-%d %H:%M:%S')})"
+                    except Exception:
+                        pass
+                
+                success = db.save_message(
+                    thread_id=thread.id,
+                    author=str(msg.author),
+                    content=msg.content.strip(),
+                    created_at=msg.created_at,
+                    reply_to=reply_to
+                )
+                
+                if success:
+                    messages_imported += 1
                     
-                    success = db.save_message(
-                        thread_id=thread.id,
-                        author=str(msg.author),
-                        content=msg.content.strip(),
-                        created_at=msg.created_at,
-                        reply_to=reply_to
-                    )
-                    
-                    if success:
-                        messages_imported += 1
-                        
-                        if progress_message and messages_imported % 100 == 0:
-                            await progress_message.edit(content=f"📥 Importing messages... ({messages_imported} processed)")
-            
-            session.commit()
-            return messages_imported
+                    if progress_message and messages_imported % 100 == 0:
+                        await progress_message.edit(content=f"📥 Importing messages... ({messages_imported} processed)")
+        
+        return messages_imported
             
     except SQLAlchemyError as e:
         print(f"Database error during import: {e}")
@@ -121,9 +102,13 @@ Show this help message
 Save a thread for monitoring
 Example: `!saveThread 123456789 general-feedback`
 
-`!sum "nickname"`
+`!sum "nickname" [timeframe]`
 Generate a summary for a stored thread
-Example: `!sum general-feedback`
+Examples:
+• `!sum general-feedback` - Last 24 hours
+• `!sum general-feedback 3d` - Last 3 days
+• `!sum general-feedback 1w` - Last week
+• `!sum general-feedback 30d` - Last 30 days
 
 `!listThreads`
 Show all watched threads and their status
@@ -139,28 +124,27 @@ Show all watched threads and their status
             return await ctx.reply("⚠️ Only Devs or Mods can use this command.")
 
         try:
-            with Session() as session:
-                threads = session.query(Thread).all()
-                if not threads:
-                    return await ctx.reply("No threads are currently being watched.")
+            threads = db.get_threads()
+            if not threads:
+                return await ctx.reply("No threads are currently being watched.")
 
-                thread_list = ["📋 **Watched Threads:**\n"]
-                for thread in threads:
-                    try:
-                        # Try to fetch the thread to check if it still exists
-                        channel = await ctx.guild.fetch_channel(thread.thread_id)
-                        status = "🟢" if channel and isinstance(channel, discord.Thread) else "🔴"
-                    except (discord.NotFound, discord.Forbidden):
-                        status = "🔴"
+            thread_list = ["📋 **Watched Threads:**\n"]
+            for thread in threads:
+                try:
+                    # Try to fetch the thread to check if it still exists
+                    channel = await ctx.guild.fetch_channel(thread.thread_id)
+                    status = "🟢" if channel and isinstance(channel, discord.Thread) else "🔴"
+                except (discord.NotFound, discord.Forbidden):
+                    status = "🔴"
 
-                    thread_list.append(
-                        f"{status} **{thread.nickname}**\n"
-                        f"  • ID: {thread.thread_id}\n"
-                        f"  • Created by: {thread.created_by}\n"
-                        f"  • Created at: {thread.created_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
-                    )
+                thread_list.append(
+                    f"{status} **{thread.nickname}**\n"
+                    f"  • ID: {thread.thread_id}\n"
+                    f"  • Created by: {thread.created_by}\n"
+                    f"  • Created at: {thread.created_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                )
 
-                await ctx.reply("\n".join(thread_list))
+            await ctx.reply("\n".join(thread_list))
         except Exception as e:
             await ctx.reply(f"❌ Error listing threads: {str(e)}")
 
@@ -194,8 +178,16 @@ Show all watched threads and their status
             await ctx.reply(f"❌ Error saving thread: {str(e)}")
 
     @commands.command(name="sum")
-    async def sum_command(self, ctx, nickname: str):
-        """Generate a summary for a stored thread"""
+    async def sum_command(self, ctx, nickname: str, timeframe: str = None):
+        """
+        Generate a summary for a stored thread
+        
+        Examples:
+        !sum general-feedback      - Last 24 hours
+        !sum general-feedback 3d   - Last 3 days
+        !sum general-feedback 1w   - Last week
+        !sum general-feedback 30d  - Last 30 days
+        """
         if not is_privileged(ctx.author):
             return await ctx.reply("⚠️ Only Devs or Mods can use this command.")
         
@@ -204,9 +196,11 @@ Show all watched threads and their status
             return await ctx.reply(f"❌ No thread found with nickname '{nickname}'.")
         
         try:
-            await ctx.reply("🧠 Generating summary... please wait.")
-            summary = await summarize_thread(thread)
-            await ctx.reply(f"📋 **Summary:**\n{summary}")
+            start_date, end_date = parse_timeframe(timeframe)
+            await ctx.reply(f"🧠 Generating summary for {format_timeframe(start_date, end_date)}... please wait.")
+            
+            summary = await summarize_thread(thread, timeframe)
+            await ctx.reply(f"📋 **Summary ({format_timeframe(start_date, end_date)}):**\n{summary}")
         except Exception as e:
             await ctx.reply(f"❌ Error generating summary: {str(e)}")
 

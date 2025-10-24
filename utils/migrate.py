@@ -1,15 +1,7 @@
 import re
 from datetime import datetime
-from utils.db import db, Session
+from config.database import db
 from sqlalchemy.exc import SQLAlchemyError
-
-def parse_author_and_role(author_text: str) -> tuple[str, Optional[str]]:
-    """Parse author text to extract role and username."""
-    role_match = re.match(r'\[(.*?)\]\s*(.*)', author_text)
-    if role_match:
-        role, author = role_match.groups()
-        return author.strip(), role.strip()
-    return author_text.strip(), None
 
 def parse_log_line(line: str):
     """Parse a line from feedback_log.txt into its components."""
@@ -24,12 +16,16 @@ def parse_log_line(line: str):
             timestamp = datetime.strptime(timestamp_str.strip(), '%Y-%m-%d %H:%M:%S %Z')
             
             # Extract role if present
-            author, role = parse_author_and_role(author_text)
+            role_match = re.match(r'\[(.*?)\]\s*(.*)', author_text)
+            if role_match:
+                role, author = role_match.groups()
+            else:
+                role, author = None, author_text
             
             return {
                 'timestamp': timestamp,
-                'author': author,
-                'role': role,
+                'author': author.strip(),
+                'role': role.strip() if role else None,
                 'reply_to': reply_to.strip() if reply_to else None,
                 'content': content.strip()
             }
@@ -37,10 +33,17 @@ def parse_log_line(line: str):
             return None
     return None
 
-def migrate_log_to_db(log_file: str, thread_id: int):
+def migrate_log_to_db(log_file: str, thread_id: int) -> int:
     """
     Migrate messages from a log file to the database.
     Uses SQLAlchemy transaction to ensure all messages are imported successfully.
+    
+    Args:
+        log_file: Path to the log file
+        thread_id: ID of the thread to associate messages with
+        
+    Returns:
+        int: Number of messages imported
     """
     imported = 0
     messages_to_import = []
@@ -66,7 +69,7 @@ def migrate_log_to_db(log_file: str, thread_id: int):
     # Then import all messages in a single transaction
     if messages_to_import:
         try:
-            with Session() as session:
+            with db.Session() as session:
                 for message in messages_to_import:
                     success = db.save_message(**message)
                     if success:
