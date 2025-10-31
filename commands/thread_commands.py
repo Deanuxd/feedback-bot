@@ -45,11 +45,17 @@ async def summarize_thread(thread_info, timeframe=None):
 
 async def import_thread_history(thread: discord.Thread, progress_message = None):
     """Import all messages from a thread's history."""
+    from datetime import datetime, timedelta
+    retention_days = 30
+    cutoff_date = datetime.utcnow() - timedelta(days=retention_days)
     messages_imported = 0
     
     try:
         async for msg in thread.history(limit=None, oldest_first=True):
             if not msg.author.bot and msg.content.strip():
+                if msg.created_at < cutoff_date:
+                    continue  # Skip messages older than retention period
+                
                 reply_to = None
                 if msg.reference and msg.reference.resolved:
                     reply_to = f"{msg.reference.resolved.author} ({msg.reference.resolved.created_at.strftime('%Y-%m-%d %H:%M:%S')})"
@@ -75,7 +81,7 @@ async def import_thread_history(thread: discord.Thread, progress_message = None)
                         await progress_message.edit(content=f"📥 Importing messages... ({messages_imported} processed)")
         
         return messages_imported
-            
+        
     except SQLAlchemyError as e:
         print(f"Database error during import: {e}")
         raise Exception("Database error during message import")

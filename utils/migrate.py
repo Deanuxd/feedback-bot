@@ -13,7 +13,9 @@ def parse_log_line(line: str):
         timestamp_str, author_text, reply_to, content = match.groups()
         try:
             # Parse the timestamp
-            timestamp = datetime.strptime(timestamp_str.strip(), '%Y-%m-%d %H:%M:%S %Z')
+            # Remove timezone abbreviation for parsing
+            timestamp_no_tz = ' '.join(timestamp_str.strip().split(' ')[:-1])
+            timestamp = datetime.strptime(timestamp_no_tz, '%Y-%m-%d %H:%M:%S')
             
             # Extract role if present
             role_match = re.match(r'\[(.*?)\]\s*(.*)', author_text)

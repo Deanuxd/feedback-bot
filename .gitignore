@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+feedback_log.txt
+sample_data.txt
 
 # Python
 __pycache__/

@@ -16,28 +16,46 @@ A Discord bot prototype that helps moderators and developers summarize feedback 
 ---
 
 ## 🧩 Setup
-1. Clone the repo:
-   ```bash
-   git clone https://github.com/yourusername/feedback-bot.git
-   cd feedback-bot
-   ```
 
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+### 1. Create a Discord Application and Bot
+- Go to the [Discord Developer Portal](https://discord.com/developers/applications)
+- Create a new application
+- Add a bot user to the application
+- Copy the bot token for use in the `.env` file
+- Configure bot permissions (read/send messages, manage threads, etc.)
 
-3. Copy `.env.example` to `.env` and add your tokens:
-   ```
-   DISCORD_TOKEN=your_discord_bot_token_here
-   OPENAI_KEY=your_openai_api_key_here
-   DATABASE_URL=sqlite:///instance/feedback.db  # Default SQLite database
-   ```
+### 2. Clone the Repository
+```bash
+git clone https://github.com/yourusername/feedback-bot.git
+cd feedback-bot
+```
 
-4. Run the bot:
-   ```bash
-   python3 bot.py
-   ```
+### 3. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Configure Environment Variables
+- Copy `.env.example` to `.env`
+- Fill in your Discord bot token, OpenAI API key, and database URL
+```
+DISCORD_TOKEN=your_discord_bot_token_here
+OPENAI_KEY=your_openai_api_key_here
+DATABASE_URL=sqlite:///instance/feedback.db  # Default SQLite database
+```
+
+### 5. (Recommended) Create a Private Summaries Channel
+- Create a private text channel in your Discord server (e.g., `#summaries`)
+- Invite the bot to your server
+- Ensure the bot has permissions to read and send messages in the summaries channel
+- Use the bot commands from this channel to manage threads and generate summaries
+
+> **Note:** Creating a private summaries channel is recommended for organization and privacy but is not required for the bot to function.
+
+### 6. Run the Bot
+```bash
+python3 bot.py
+```
 
 ---
 
@@ -57,6 +75,19 @@ Timeframe examples:
 ```
 
 All commands require Mod or Dev role.
+
+---
+
+## ⚙️ Role Configuration
+
+Role names for Devs and Mods are configurable in the `permissions.py` file:
+
+```python
+DEV_ROLES = ["Developer", "Dev"]
+MOD_ROLES = ["Moderator", "Mod", "Admin"]
+```
+
+Modify these lists to match your server's specific role names to control access permissions.
 
 ---
 
@@ -144,29 +175,6 @@ Database models are defined in `models/database.py`:
 - Message: Stores thread messages with role information
 
 Instance-specific data (like the database file) is stored in the `instance/` directory, which is excluded from version control.
-
----
-
-## ⚙️ Configuration
-
-All configuration files are in the `config/` directory:
-
-- `prompts.py` - AI system prompts
-- `ai_config.py` - AI provider settings
-- `database.py` - Database configuration
-
----
-
-## 🔐 Permissions
-
-By default, only users with **Mod** or **Dev** roles (configurable in `permissions.py`) can:
-* Use any bot commands
-* Generate summaries
-* Manage threads
-
-The following roles are recognized:
-* Dev roles: "Developer", "Dev"
-* Mod roles: "Moderator", "Mod", "Admin"
 
 ---
 
