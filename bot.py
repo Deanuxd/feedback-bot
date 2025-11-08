@@ -17,7 +17,7 @@ load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 OPEN_API_KEY = os.getenv("OPENAI_KEY")
 
-TARGET_THREAD_ID = 1425907680479940688
+# TARGET_THREAD_ID is no longer used since summaries are for any stored thread
 
 def get_user_role(member: discord.Member) -> str:
     """Determine the highest priority role for a user."""
@@ -37,6 +37,8 @@ class FeedbackBot(commands.Bot):
         print("Loading extensions...")
         await self.load_extension("commands.thread_commands")
         print("Extensions loaded!")
+        # Sync slash commands with Discord
+        await self.tree.sync()
         # Start the cleanup task after bot is ready
         self.message_cleanup_task.start()
     
@@ -80,8 +82,9 @@ async def on_message(message):
         return
 
     # Only handle messages in the target thread
-    if message.channel.id != TARGET_THREAD_ID:
-        return
+    # Removed TARGET_THREAD_ID check to allow multiple threads
+    # if message.channel.id != TARGET_THREAD_ID:
+    #     return
 
     # Skip non-text messages
     if not message.content.strip():
@@ -114,11 +117,33 @@ async def on_message(message):
     await bot.process_commands(message)
 
 @bot.event
-async def on_message_edit(before, after):
-    """Handle message edits by logging an update line."""
-    # Only track edits in the target thread
-    if after.channel.id != TARGET_THREAD_ID:
+async def on_message_delete(message):
+    """Handle message deletion by removing the message from the database."""
+    # Skip bot's own messages
+    if message.author == bot.user:
         return
+        
+    # Skip non-text messages
+    if not message.content.strip():
+        return
+        
+    # Delete the message from the database
+    success = db.delete_message(
+        thread_id=message.channel.id,
+        author=str(message.author),
+        created_at=message.created_at
+    )
+    
+    if success:
+        print(f"Deleted message from {message.author} in thread {message.channel.id}")
+
+@bot.event
+async def on_message_edit(before, after):
+    """Handle message edits by updating the original message in the database."""
+    # Only track edits in the target thread
+    # Removed TARGET_THREAD_ID check to allow multiple threads
+    # if after.channel.id != TARGET_THREAD_ID:
+    #     return
 
     # Skip if the content didn't actually change
     if before.content.strip() == after.content.strip():
@@ -131,14 +156,37 @@ async def on_message_edit(before, after):
     # Get user's role if any
     role = get_user_role(after.author)
 
-    db.save_message(
-        thread_id=after.channel.id,
-        author=str(after.author),
-        role=role,
-        content=after.content.strip(),
-        created_at=after.edited_at or after.created_at,
-        edited=True,
-    )
+    # Update the existing message in the database instead of creating a new one
+    # We need to find the message by matching author, original content, and timestamp
+    # Since we don't store message IDs, we can match by author and created_at timestamp
+    # This assumes no duplicate messages with same author and timestamp
+
+    try:
+        from models.database import Message
+        with db.Session() as session:
+            message = session.query(Message).filter(
+                Message.thread_id == after.channel.id,
+                Message.author == str(after.author),
+                Message.created_at == before.created_at
+            ).first()
+
+            if message:
+                message.content = after.content.strip()
+                message.edited = True
+                message.created_at = after.edited_at or after.created_at
+                session.commit()
+            else:
+                # If message not found, fallback to saving as new message
+                db.save_message(
+                    thread_id=after.channel.id,
+                    author=str(after.author),
+                    role=role,
+                    content=after.content.strip(),
+                    created_at=after.edited_at or after.created_at,
+                    edited=True,
+                )
+    except Exception as e:
+        print(f"Error updating edited message: {e}")
 
 # --- RUN ---
 bot.run(TOKEN)

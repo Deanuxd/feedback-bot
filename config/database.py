@@ -35,13 +35,14 @@ class DatabaseConfig:
         # Create all tables
         Base.metadata.create_all(self.engine)
 
-    def save_thread(self, thread_id: int, nickname: str, created_by: str) -> bool:
+    def save_thread(self, thread_id: int, nickname: str, created_by: str, description: Optional[str] = None) -> bool:
         """Save a thread to the database."""
         try:
             with self.Session() as session:
                 thread = Thread(
                     thread_id=thread_id,
                     nickname=nickname,
+                    description=description,
                     created_by=created_by
                 )
                 session.add(thread)
@@ -59,6 +60,11 @@ class DatabaseConfig:
         """Get thread info by ID."""
         with self.Session() as session:
             return session.query(Thread).filter(Thread.thread_id == thread_id).first()
+
+    def get_threads(self) -> List[Thread]:
+        """Get all threads."""
+        with self.Session() as session:
+            return session.query(Thread).order_by(Thread.created_at.desc()).all()
 
     def save_message(self, thread_id: int, author: str, content: str,
                     created_at: datetime, role: Optional[str] = None,
@@ -81,6 +87,21 @@ class DatabaseConfig:
         except Exception:
             return False
 
+    def update_message(self, message_id: int, new_content: str, edited_at: datetime) -> bool:
+        """Update the content and edited timestamp of an existing message."""
+        try:
+            with self.Session() as session:
+                message = session.query(Message).filter(Message.id == message_id).first()
+                if not message:
+                    return False
+                message.content = new_content
+                message.edited = True
+                message.created_at = edited_at  # Update timestamp to edited time
+                session.commit()
+                return True
+        except Exception:
+            return False
+
     def get_messages(self, thread_id: int,
                     start_date: Optional[datetime] = None,
                     end_date: Optional[datetime] = None) -> List[Message]:
@@ -97,6 +118,28 @@ class DatabaseConfig:
                 query = query.filter(Message.created_at <= end_date)
 
             return query.order_by(Message.created_at.asc()).all()
+            
+    def delete_message(self, thread_id: int, author: str, created_at: datetime) -> bool:
+        """
+        Delete a message from the database by matching thread_id, author, and created_at.
+        Returns True if a message was deleted, False otherwise.
+        """
+        try:
+            with self.Session() as session:
+                message = session.query(Message).filter(
+                    Message.thread_id == thread_id,
+                    Message.author == author,
+                    Message.created_at == created_at
+                ).first()
+                
+                if message:
+                    session.delete(message)
+                    session.commit()
+                    return True
+                return False
+        except Exception as e:
+            print(f"Error deleting message: {e}")
+            return False
 
 # Create a global database instance
 db = DatabaseConfig()

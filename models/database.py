@@ -12,6 +12,7 @@ class Thread(Base):
 
     thread_id = Column(Integer, primary_key=True)
     nickname = Column(String, unique=True, nullable=False)
+    description = Column(String, nullable=True)  # New field for thread description/context
     created_by = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     

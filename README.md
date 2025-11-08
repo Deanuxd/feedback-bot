@@ -12,6 +12,8 @@ A Discord bot prototype that helps moderators and developers summarize feedback 
 - Flexible AI provider system
 - SQLAlchemy ORM for database flexibility
 - Automatic message cleanup
+- Thread descriptions for context-aware summaries
+- Message deletion synchronization
 
 ---
 
@@ -65,6 +67,7 @@ python3 bot.py
 * `!saveThread [thread_id] "nickname"` - Save a thread for monitoring
 * `!sum "nickname" [timeframe]` - Generate a summary for a stored thread
 * `!listThreads` - Show all watched threads and their status
+* `!setDescription "nickname" "description"` - Set context for a thread
 
 Timeframe examples:
 ```
@@ -171,10 +174,33 @@ Make sure to install the appropriate database driver:
 
 ### Database Models
 Database models are defined in `models/database.py`:
-- Thread: Stores Discord thread information
+- Thread: Stores Discord thread information with descriptions
 - Message: Stores thread messages with role information
 
 Instance-specific data (like the database file) is stored in the `instance/` directory, which is excluded from version control.
+
+---
+
+## 📝 Thread Descriptions
+
+Thread descriptions provide context for AI summaries, making them more accurate and relevant:
+
+1. Save a thread: `!saveThread 123456789 alpha_feedback`
+2. Add context: `!setDescription alpha_feedback "A place to provide feedback for the character 'Alpha'"`
+3. Generate summary: `!sum alpha_feedback`
+
+The AI will understand that the thread is about a specific topic (like character feedback), even if users don't explicitly mention it in every message.
+
+---
+
+## 🔄 Message Synchronization
+
+The bot maintains synchronization between Discord and the database:
+- New messages are saved to the database
+- Edited messages are updated in the database
+- Deleted messages are removed from the database
+
+This ensures that summaries always reflect the current state of the thread.
 
 ---
 

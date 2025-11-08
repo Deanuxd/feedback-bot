@@ -2,6 +2,30 @@
 
 All notable changes to the Feedback Bot project will be documented in this file.
 
+## [1.3.0] - 2025-11-08
+
+### Added
+- Thread description feature
+  - Added description field to Thread model
+  - New `!setDescription` command to set context for threads
+  - Descriptions are included in AI prompts for better summaries
+  - Migration script for adding description column to existing databases
+- Message deletion synchronization
+  - Messages deleted in Discord are now removed from the database
+  - Ensures summaries only include current messages
+- Long summary handling
+  - Summaries exceeding Discord's 2000 character limit are split into multiple messages
+  - Ensures complete summaries for longer timeframes
+
+### Changed
+- Improved database operations
+  - Added get_threads() method for listing all threads
+  - Added delete_message() method for removing deleted messages
+  - Updated ThreadInfo dataclass to include description field
+- Enhanced summary generation
+  - Thread descriptions provide context for AI summaries
+  - Better handling of thread-specific topics
+
 ## [1.2.1] - 2025-10-24
 
 ### Changed
