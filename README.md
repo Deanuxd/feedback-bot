@@ -61,6 +61,14 @@ python3 bot.py
 
 ---
 
+### Example View
+
+<img width="60%" alt="image" src="https://github.com/user-attachments/assets/11ae0e7c-6c77-45e6-b89d-e15d0af9da19" />
+
+
+
+---
+
 ## 🤖 Commands
 
 * `!commands` - Show all available commands
